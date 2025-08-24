@@ -18,3 +18,35 @@ pub fn create_signer_from_path(
 
     signer_from_path(&matches, &keypair_path, "Keypair", &mut wallet_manager)
 }
+
+pub async fn send_and_confirm_transaction(
+    transaction: &VersionedTransaction,
+    rpc_client: &RpcClient,
+) -> eyre::Result<String> {
+    // Try to send and confirm the transaction
+    match rpc_client.send_and_confirm_transaction(transaction).await {
+        Ok(signature) => {
+            println!(
+                "Transaction confirmed: {}\n\n",
+                signature.to_string().green()
+            );
+            Ok(signature.to_string())
+        }
+        Err(err) => {
+            if let ClientErrorKind::RpcError(RpcError::RpcResponseError {
+                data:
+                    RpcResponseErrorData::SendTransactionPreflightFailure(
+                        RpcSimulateTransactionResult {
+                            logs: Some(logs), ..
+                        },
+                    ),
+                ..
+            }) = &err.kind
+            {
+                println!("Simulation logs:\n\n{}\n", logs.join("\n").yellow());
+            }
+
+            Err(eyre!("Transaction failed: {}", err.to_string().red()))
+        }
+    }
+}
